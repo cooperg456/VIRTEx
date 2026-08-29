@@ -1,10 +1,23 @@
-#pragma once
+/******************************************************************************
+ *  Copyright (c) 2026 Cooper Gray
+ *
+ *  This application is free software, meaning you can redistribute it and/or
+ *  modify it under the terms of the Apache License Version 2.0. See `LICENSE`
+ *  for details. You may obtain a copy of the License at
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ ******************************************************************************/
 
-#include "ReactionNetwork.hpp"
+#pragma once
 
 #define MAX_SSA_REACTANTS 60    //  sized for CUDA shared memory limits
 #define MAX_SSA_REACTIONS 96
 #define SSA_BLOCK_SIZE 32
+
+#include "ReactionNetwork.hpp"
+
+/******************************************************************************
+ *  SSASysInfo struct
+ ******************************************************************************/
 
 struct SSASysInfo {
     std::vector<double> reactionRates{};
@@ -24,4 +37,8 @@ struct SSASimInfo {
     ReactionNetwork base{};
 };
 
-void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos);
+/******************************************************************************
+ *  Stochastic simulation algorithm
+ ******************************************************************************/
+
+void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos);

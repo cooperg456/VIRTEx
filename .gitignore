@@ -82,5 +82,5 @@ Testing/
 
 # user
 .vscode/
+.idea/
 .DS_store
-.csv

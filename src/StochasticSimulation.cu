@@ -1,19 +1,31 @@
-#include "StochasticSimulation.cuh"
+/******************************************************************************
+ *  Copyright (c) 2026 Cooper Gray
+ *
+ *  This application is free software, meaning you can redistribute it and/or
+ *  modify it under the terms of the Apache License Version 2.0. See `LICENSE`
+ *  for details. You may obtain a copy of the License at
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ ******************************************************************************/
 
-#include <iostream>
-#include <fstream>
+#include "StochasticSimulation.cuh"
 
 #include "cuda_runtime.h"
 #include "curand_kernel.h"
 
-__global__
-void cuSSA(int reactants, int reactions, int warps, int savedPaths,
-           double tGrid, double tMax, int* d_conds, double* d_rates, 
-           int* d_alpha, int* d_trans, double* d_times, int* d_paths) {
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+#include <iostream>
+#include <fstream>
 
-    int sim = blockIdx.x / warps;
-    int path = idx % (warps * SSA_BLOCK_SIZE);
+/******************************************************************************
+ *  Stochastic simulation algorithm
+ ******************************************************************************/
+
+__global__
+static void cuSSA(const int reactants, const int reactions, const int warps, const int savedPaths,
+                  const double tGrid, const double tMax, const int* d_conds, const double* d_rates,
+                  const int* d_alpha, const int* d_trans, double* d_times, int* d_paths) {
+    const unsigned int idx = threadIdx.x + blockDim.x * blockIdx.x;
+    const unsigned int sim = blockIdx.x / warps;
+    const unsigned int path = idx % (warps * SSA_BLOCK_SIZE);
 
     //  fill shared memory
 
@@ -21,11 +33,11 @@ void cuSSA(int reactants, int reactions, int warps, int savedPaths,
     __shared__ int s_alpha[MAX_SSA_REACTANTS * MAX_SSA_REACTIONS];
     __shared__ int s_trans[MAX_SSA_REACTANTS * MAX_SSA_REACTIONS];
 
-    for (int i = threadIdx.x; i < reactions; i += blockDim.x) {
+    for (unsigned int i = threadIdx.x; i < reactions; i += blockDim.x) {
         s_rates[i] = d_rates[blockIdx.x * reactions + i];
     }
 
-    for (int i = threadIdx.x; i < reactants * reactions; i += blockDim.x) {
+    for (unsigned int i = threadIdx.x; i < reactants * reactions; i += blockDim.x) {
         s_alpha[i] = d_alpha[blockIdx.x * reactants * reactions + i];
         s_trans[i] = d_trans[blockIdx.x * reactants * reactions + i];
     }
@@ -34,8 +46,9 @@ void cuSSA(int reactants, int reactions, int warps, int savedPaths,
 
     //  initialize cuRAND
 
-    curandStatePhilox4_32_10 state;
-    curand_init(9384, idx, 0, &state);    //  TODO:   make a seed cli arg, default it to random device
+    //  TODO:   make a seed cli arg, default it to random device
+    curandStatePhilox4_32_10 state{};
+    curand_init(9384, idx, 0, &state);
 
     //  Initialize t = t0 and x = x0, set n = 0.
 
@@ -48,9 +61,9 @@ void cuSSA(int reactants, int reactions, int warps, int savedPaths,
     //  record first n paths
 
     int tSaved = 0;
-    int pointsPerPath;
+    int pointsPerPath = 0;
     if (path < savedPaths) {
-        pointsPerPath = tMax / tGrid + 1;
+        pointsPerPath = static_cast<int>(tMax / tGrid + 1);
         for (int i = 0; i < reactants; i++) {
             d_paths[(sim * savedPaths * pointsPerPath * reactants) + (path * pointsPerPath * reactants) + i] = x[i];
         }
@@ -93,8 +106,7 @@ void cuSSA(int reactants, int reactions, int warps, int savedPaths,
             //  Let j be the smallest integer for which
 
             int j = 0;
-            double sum_a = a[0];
-            for (; sum_a < r.y * a0 && j < reactions - 1;) {
+            for (double sum_a = a[0]; sum_a < r.y * a0 && j < reactions - 1;) {
                 j++;
                 sum_a += a[j];
             }
@@ -124,8 +136,8 @@ void cuSSA(int reactants, int reactions, int warps, int savedPaths,
     } while (t < tMax);
 }
 
-void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos) {
-    int numBlocks = simInfo.warps * sysInfos.size();
+void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
+    int numBlocks = simInfo.warps * static_cast<int>(sysInfos.size());
 
     //  ReactionNetwork info
 
@@ -137,16 +149,16 @@ void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos) {
     double *d_timePoints = nullptr;
     int *d_samplePaths = nullptr;
 
-    int n_reactionRates = simInfo.base.reactions.size();
-    int n_initialConditions = simInfo.base.initialConditions.size();
-    int n_reactantCoefficients = simInfo.base.reactantCoefficients.size();
-    int n_transitionCoefficients = simInfo.base.transitionCoefficients.size();
+    const int n_reactionRates = static_cast<int>(simInfo.base.reactions.size());
+    const int n_initialConditions = static_cast<int>(simInfo.base.initialConditions.size());
+    const int n_reactantCoefficients = static_cast<int>(simInfo.base.reactantCoefficients.size());
+    const int n_transitionCoefficients = static_cast<int>(simInfo.base.transitionCoefficients.size());
     
-    int n_timePoints;
-    int n_samplePaths;
+    int n_timePoints = 0;
+    int n_samplePaths = 0;
     int pointsPerPath = 0;
     if (simInfo.savedPaths) {
-        pointsPerPath = simInfo.tMax / simInfo.tGrid + 1;
+        pointsPerPath = static_cast<int>(simInfo.tMax / simInfo.tGrid + 1);
         n_timePoints = simInfo.savedPaths * pointsPerPath;
         n_samplePaths = n_timePoints * n_initialConditions;
     }
@@ -165,9 +177,9 @@ void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos) {
 
     //  memcpy to gpu
 
-    for (int sim = 0; sim < (int)sysInfos.size(); sim++) {
+    for (int sim = 0; sim < static_cast<int>(sysInfos.size()); sim++) {
         for (int w = 0; w < simInfo.warps; w++) {
-            int block = sim * simInfo.warps + w;
+            const int block = sim * simInfo.warps + w;
             cudaMemcpy(d_reactionRates + n_reactionRates * block, sysInfos[sim].reactionRates.data(), n_reactionRates * sizeof(double), cudaMemcpyHostToDevice);
             cudaMemcpy(d_reactantCoefficients + n_reactantCoefficients * block, sysInfos[sim].reactantCoefficients.data(), n_reactantCoefficients * sizeof(int), cudaMemcpyHostToDevice);
             cudaMemcpy(d_transitionCoefficients + n_transitionCoefficients * block, sysInfos[sim].transitionCoefficients.data(), n_transitionCoefficients * sizeof(int), cudaMemcpyHostToDevice);
@@ -180,7 +192,7 @@ void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos) {
     int device;
     cudaGetDevice(&device);
 
-    cudaMemLocation memlocDev;
+    cudaMemLocation memlocDev{};
     memlocDev.id = device;
     memlocDev.type = cudaMemLocationTypeDevice;
 
@@ -205,7 +217,7 @@ void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos) {
     cudaFree(d_initialConditions);
 
     if (simInfo.savedPaths) {
-        cudaMemLocation memlocHost;
+        cudaMemLocation memlocHost{};
         memlocHost.id = 0;
         memlocHost.type = cudaMemLocationTypeHost;
 
@@ -217,12 +229,12 @@ void SSA(SSASimInfo simInfo, std::vector<SSASysInfo> &sysInfos) {
         std::filesystem::create_directories(simInfo.outputDir);
 
         if (simInfo.savedPaths) {
-            cudaMemLocation memlocHost;
-            memlocHost.id = 0;
-            memlocHost.type = cudaMemLocationTypeHost;
+            cudaMemLocation memlocHost2{};
+            memlocHost2.id = 0;
+            memlocHost2.type = cudaMemLocationTypeHost;
 
-            cudaMemPrefetchAsync(d_timePoints, n_timePoints * sysInfos.size() * sizeof(double), memlocHost, 0);
-            cudaMemPrefetchAsync(d_samplePaths, n_samplePaths * sysInfos.size() * sizeof(int), memlocHost, 0);
+            cudaMemPrefetchAsync(d_timePoints, n_timePoints * sysInfos.size() * sizeof(double), memlocHost2, 0);
+            cudaMemPrefetchAsync(d_samplePaths, n_samplePaths * sysInfos.size() * sizeof(int), memlocHost2, 0);
             cudaDeviceSynchronize();
 
             for (size_t sim = 0; sim < sysInfos.size(); sim++) {
