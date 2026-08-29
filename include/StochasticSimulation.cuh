@@ -27,6 +27,7 @@ struct SSASysInfo {
 };
 
 struct SSASimInfo {
+    unsigned long long seed = 0;
     double tMax = 0;
     int warps = 0;
     

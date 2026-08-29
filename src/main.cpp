@@ -17,6 +17,7 @@
 
 #include "CLI/CLI11.hpp"
 
+#include <random>
 #include <tuple>
 
 /******************************************************************************
@@ -35,16 +36,22 @@ int main(int argc, char *argv[]) {
         "Specify the reaction network JSON file")
         ->required();
 
-    int warps = 1;
-    app.add_option("-w,--warps", warps,
+    int warps;
+    app.add_option("-W,--warps", warps,
         "Number of sample path warps (32 paths per warp)")
         ->required()
         ->check(CLI::NonNegativeNumber);
 
-    double tMax = 10;
+    double tMax;
     app.add_option("-T,--tMax", tMax,
         "Maximum simulation time")
         ->required()
+        ->check(CLI::NonNegativeNumber);
+
+    std::random_device rd;
+    unsigned long long seed = rd();
+    app.add_option("-S,--seed", seed,
+        "Base seed for initializing cuRAND")
         ->check(CLI::NonNegativeNumber);
 
     std::vector<std::tuple<std::string, std::vector<double>>> rates;
@@ -145,6 +152,7 @@ int main(int argc, char *argv[]) {
      **************************************************************************/
 
     SSASimInfo simInfo;
+    simInfo.seed = seed;
     simInfo.tMax = tMax;
     simInfo.warps = warps;
     simInfo.tGrid = tGrid;

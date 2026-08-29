@@ -20,8 +20,8 @@
  ******************************************************************************/
 
 __global__
-static void cuSSA(const int reactants, const int reactions, const int warps, const int savedPaths,
-                  const double tGrid, const double tMax, const int* d_conds, const double* d_rates,
+static void cuSSA(const int reactants, const int reactions, const int warps, const int savedPaths, const double tGrid,
+                  const double tMax, const unsigned long long seed, const int* d_conds, const double* d_rates,
                   const int* d_alpha, const int* d_trans, double* d_times, int* d_paths) {
     const unsigned int idx = threadIdx.x + blockDim.x * blockIdx.x;
     const unsigned int sim = blockIdx.x / warps;
@@ -46,9 +46,8 @@ static void cuSSA(const int reactants, const int reactions, const int warps, con
 
     //  initialize cuRAND
 
-    //  TODO:   make a seed cli arg, default it to random device
     curandStatePhilox4_32_10 state{};
-    curand_init(9384, idx, 0, &state);
+    curand_init(seed, idx, 0, &state);
 
     //  Initialize t = t0 and x = x0, set n = 0.
 
@@ -73,6 +72,7 @@ static void cuSSA(const int reactants, const int reactions, const int warps, con
     //  while (t < tMax);
 
     do {
+
         //  Compute a_j(x), j = 1, 2, ..., K and a_0(x).
 
         double a[MAX_SSA_REACTIONS];
@@ -80,8 +80,7 @@ static void cuSSA(const int reactants, const int reactions, const int warps, con
         for (int j = 0; j < reactions; j++) {
             a[j] = s_rates[j];
             for (int m = 0; m < reactants; m++) {
-                int alpha_jm = s_alpha[j * reactants + m];
-                if (alpha_jm > 0) {
+                if (const int alpha_jm = s_alpha[j * reactants + m]; alpha_jm > 0) {
                     if (x[m] < alpha_jm) {
                         a[j] = 0.0;
                         break;
@@ -101,7 +100,7 @@ static void cuSSA(const int reactants, const int reactions, const int warps, con
 
             //  Use the Golden rule to transform r_1 into τ ∼ Exp(a_0(x))
 
-            double tau = log(1 / r.x) / a0;   
+            double tau = log(1 / r.x) / a0;
 
             //  Let j be the smallest integer for which
 
@@ -204,7 +203,7 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
     //  kernel launch
 
     cuSSA<<<numBlocks, SSA_BLOCK_SIZE>>>(n_initialConditions, n_reactionRates, simInfo.warps, simInfo.savedPaths, 
-                                        simInfo.tGrid, simInfo.tMax, d_initialConditions, d_reactionRates, 
+                                        simInfo.tGrid, simInfo.tMax, simInfo.seed, d_initialConditions, d_reactionRates,
                                         d_reactantCoefficients, d_transitionCoefficients, d_timePoints, d_samplePaths);
                                 
     cudaDeviceSynchronize();
