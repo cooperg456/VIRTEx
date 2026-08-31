@@ -12,10 +12,9 @@
  *  http://www.apache.org/licenses/LICENSE-2.0
  ******************************************************************************/
 
-#include "StochasticSimulation.cuh"
+#include "CLIAdapter.hpp"
 #include "ReactionNetwork.hpp"
-
-#include "CLI/CLI11.hpp"
+#include "StochasticSimulation.cuh"
 
 #include <random>
 #include <tuple>
@@ -25,92 +24,22 @@
  ******************************************************************************/
  
 int main(int argc, char *argv[]) {
-    CLI::App app{"CuCTMC -- Parallel tools for analyzing Chemical Master Equation CTMCs"};
-
-    /**************************************************************************
-     *  CLI Arguments
-     **************************************************************************/
-
-    std::filesystem::path inputFile;
-    app.add_option("input", inputFile,
-        "Specify the reaction network JSON file")
-        ->required();
-
-    int warps;
-    app.add_option("-W,--warps", warps,
-        "Number of sample path warps (32 paths per warp)")
-        ->required()
-        ->check(CLI::NonNegativeNumber);
-
-    double tMax;
-    app.add_option("-T,--tMax", tMax,
-        "Maximum simulation time")
-        ->required()
-        ->check(CLI::NonNegativeNumber);
-
-    std::random_device rd;
-    unsigned long long seed = rd();
-    app.add_option("-S,--seed", seed,
-        "Base seed for initializing cuRAND")
-        ->check(CLI::NonNegativeNumber);
-
-    std::vector<std::tuple<std::string, std::vector<double>>> rates;
-    app.add_option("--rate", rates,
-        "Override a reaction's rate. Ex. "
-        "\n--rate GammaV 15"
-        "\n--rate GammaV $(seq 1.5 1.5 150)");
-
-    std::vector<std::tuple<std::string, std::vector<int>>> reacts;
-    app.add_option("--reactants", reacts,
-        "Override a reaction's reactants. Ex. "
-        "\n--reactants Gamma 1 0 1"
-        "\n--reactants Gamma $(printf '%i 0 1' $(seq 1 10))");
-
-    std::vector<std::tuple<std::string, std::vector<int>>> prods;
-    app.add_option("--products", prods,
-        "Override a reaction's products. Ex. "
-        "\n--reactants aI 0 35 0 1"
-        "\n--reactants aI $(printf '0 %i 0 1' $(seq 1 50))");
-
-    std::vector<int> initialConditions;
-    app.add_option("--ic", initialConditions,
-        "Override the initial conditions. Ex. "
-        "\n--ic 1000 3 0 0"
-        "\n--ic $(printf '1000 %i 0 0' $(seq 1 30))")
-        ->check(CLI::NonNegativeNumber);
-
-    std::filesystem::path outputDir{};
-    auto outputDirOpt = app.add_option("-o,--output", outputDir,
-        "Directory to place simulation output files");
-
-    double tGrid = 0;
-    auto tGridOpt = app.add_option("-t,--tGrid", tGrid,
-        "Time grid spacing for saved trajectories")
-        ->check(CLI::NonNegativeNumber);
-
-    int saved = 0;
-    app.add_option("-s,--save", saved,
-        "Number of paths to save trajectories for")
-        ->needs(tGridOpt)
-        ->needs(outputDirOpt)
-        ->check(CLI::NonNegativeNumber);
+    CLIAdapter::Arguments args = CLIAdapter::parseArguments(argc, argv);
 
     /**************************************************************************
      *  Input checking
      **************************************************************************/
 
-    CLI11_PARSE(app, argc, argv);
-
-    ReactionNetwork ctmc(inputFile);
+    ReactionNetwork ctmc(args.inputFile);
 
     std::vector<int> sweepSizes;
     size_t reactantsSize = ctmc.reactants.size();
-    sweepSizes.reserve(rates.size());
-    for (auto & rate : rates) {
+    sweepSizes.reserve(args.overrides.rates.size());
+    for (auto & rate : args.overrides.rates) {
            sweepSizes.push_back(static_cast<int>(std::get<1>(rate).size()));
         }
 
-    for (auto & react : reacts) {
+    for (auto & react : args.overrides.reactants) {
         int sweepSize = static_cast<int>(std::get<1>(react).size());
         if (sweepSize % reactantsSize != 0) {
             throw std::runtime_error(
@@ -119,7 +48,7 @@ int main(int argc, char *argv[]) {
         sweepSizes.push_back(sweepSize / static_cast<int>(reactantsSize));
     }
 
-    for (auto & prod : prods) {
+    for (auto & prod : args.overrides.products) {
         int sweepSize = static_cast<int>(std::get<1>(prod).size());
         if (sweepSize % reactantsSize != 0) {
             throw std::runtime_error(
@@ -128,8 +57,8 @@ int main(int argc, char *argv[]) {
         sweepSizes.push_back(sweepSize / static_cast<int>(reactantsSize));
     }
 
-    if (!initialConditions.empty()) {
-        int sweepSize = static_cast<int>(initialConditions.size());
+    if (!args.overrides.initialConditions.empty()) {
+        int sweepSize = static_cast<int>(args.overrides.initialConditions.size());
         if (sweepSize % reactantsSize != 0) {
             throw std::runtime_error(
                 "Length of initial conditions must be a multiple of the number of reactants");
@@ -152,13 +81,35 @@ int main(int argc, char *argv[]) {
      **************************************************************************/
 
     SSASimInfo simInfo;
-    simInfo.seed = seed;
-    simInfo.tMax = tMax;
-    simInfo.warps = warps;
-    simInfo.tGrid = tGrid;
-    simInfo.savedPaths = saved;
-    simInfo.outputDir = outputDir; 
+    simInfo.seed = args.seed;
+    simInfo.tMax = args.stoppingConditions.tMax;
+    simInfo.warps = args.warps;
+    simInfo.tGrid = args.analysis.savePaths.tGrid;
+    simInfo.savedPaths = args.analysis.savePaths.saved;
+    simInfo.outputDir = args.outputDir;
     simInfo.base = ctmc;
+
+    for (auto& boundSet : args.stoppingConditions.bounds) {
+        for (auto& bound : boundSet) {
+            simInfo.boundVals.push_back(static_cast<int>(ctmc.getReactantIdx(std::get<0>(bound))));
+
+            if (std::string& op = std::get<1>(bound); op == "=") {
+                simInfo.boundVals.push_back(0);
+            }
+            else if (op == ">") {
+                simInfo.boundVals.push_back(1);
+            }
+            else if (op == "<") {
+                simInfo.boundVals.push_back(2);
+            }
+            else {
+                throw std::runtime_error("Invalid comparison operator: " + op);
+            }
+
+            simInfo.boundVals.push_back(std::get<2>(bound));
+        }
+        simInfo.boundIdxs.push_back(static_cast<int>(simInfo.boundVals.size()));
+    }
 
     std::vector<SSASysInfo> sysInfos(sweepSize);
     for (size_t i = 0; i < sweepSize; i++) {
@@ -167,7 +118,7 @@ int main(int argc, char *argv[]) {
         sysInfos[i].reactantCoefficients = ctmc.reactantCoefficients;
         sysInfos[i].transitionCoefficients = ctmc.transitionCoefficients;
 
-        for (auto & j : rates) {
+        for (auto & j : args.overrides.rates) {
             size_t reaction = ctmc.getReactionIdx(std::get<0>(j));
             double rate = std::get<1>(j)[i];
 
@@ -175,7 +126,7 @@ int main(int argc, char *argv[]) {
         }
 
         //  reacts loop must come before prods
-        for (auto & j : reacts) {
+        for (auto & j : args.overrides.reactants) {
             size_t reaction = ctmc.getReactionIdx(std::get<0>(j));
             std::vector<int>& react = std::get<1>(j);
 
@@ -190,7 +141,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        for (auto & j : prods) {
+        for (auto & j : args.overrides.products) {
             size_t reaction = ctmc.getReactionIdx(std::get<0>(j));
             std::vector<int>& prod = std::get<1>(j);
 
@@ -202,9 +153,9 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (!initialConditions.empty()) {
+        if (!args.overrides.initialConditions.empty()) {
             for (size_t j = 0; j < reactantsSize; j++) {
-                sysInfos[i].initialConditions[j] = initialConditions[i * reactantsSize + j];
+                sysInfos[i].initialConditions[j] = args.overrides.initialConditions[i * reactantsSize + j];
             }
         }
     }

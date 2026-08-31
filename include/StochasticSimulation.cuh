@@ -11,7 +11,10 @@
 
 #define MAX_SSA_REACTANTS 60    //  sized for CUDA shared memory limits
 #define MAX_SSA_REACTIONS 96
-#define SSA_BLOCK_SIZE 32
+
+#define MAX_SSA_BOUNDARIES 84   //  sized for CUDA constant memory limits
+
+#define SSA_BLOCK_SIZE 32       //  multiple of 32. "it works on my machine"
 
 #include "ReactionNetwork.hpp"
 
@@ -23,7 +26,7 @@ struct SSASysInfo {
     std::vector<double> reactionRates{};
     std::vector<int> initialConditions{};
     std::vector<int> reactantCoefficients{};
-    std::vector<int> transitionCoefficients{};    
+    std::vector<int> transitionCoefficients{};
 };
 
 struct SSASimInfo {
@@ -32,6 +35,9 @@ struct SSASimInfo {
     int warps = 0;
     
     double tGrid = 0;
+    std::vector<int> boundIdxs{};
+    std::vector<int> boundVals{};
+
     int savedPaths = 0;
     std::filesystem::path outputDir{};
 

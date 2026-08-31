@@ -12,17 +12,26 @@
 #include "cuda_runtime.h"
 #include "curand_kernel.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
+
+/******************************************************************************
+ *  CUDA constant memory
+ ******************************************************************************/
+
+__constant__ static int c_boundIdxs[MAX_SSA_BOUNDARIES];
+__constant__ static int c_boundVals[MAX_SSA_REACTANTS * 3];
 
 /******************************************************************************
  *  Stochastic simulation algorithm
  ******************************************************************************/
 
 __global__
-static void cuSSA(const int reactants, const int reactions, const int warps, const int savedPaths, const double tGrid,
-                  const double tMax, const unsigned long long seed, const int* d_conds, const double* d_rates,
-                  const int* d_alpha, const int* d_trans, double* d_times, int* d_paths) {
+static void cuSSA(const int reactants, const int reactions, const int warps, const int savedPaths, const int boundSets,
+                  const double tGrid, const double tMax, const unsigned long long seed,
+                  const int* d_conds, const double* d_rates, const int* d_alpha, const int* d_trans,
+                  double* d_times, int* d_paths, double* d_exitTimes, int* d_exits) {
+
     const unsigned int idx = threadIdx.x + blockDim.x * blockIdx.x;
     const unsigned int sim = blockIdx.x / warps;
     const unsigned int path = idx % (warps * SSA_BLOCK_SIZE);
@@ -69,70 +78,116 @@ static void cuSSA(const int reactants, const int reactions, const int warps, con
         d_times[(sim * savedPaths * pointsPerPath) + (path * pointsPerPath)] = t;
     }
 
+    int exitCode = -1;
+
     //  while (t < tMax);
 
     do {
 
-        //  Compute a_j(x), j = 1, 2, ..., K and a_0(x).
+            //  Compute a_j(x), j = 1, 2, ..., K and a_0(x).
 
-        double a[MAX_SSA_REACTIONS];
-        double a0 = 0;
-        for (int j = 0; j < reactions; j++) {
-            a[j] = s_rates[j];
-            for (int m = 0; m < reactants; m++) {
-                if (const int alpha_jm = s_alpha[j * reactants + m]; alpha_jm > 0) {
-                    if (x[m] < alpha_jm) {
-                        a[j] = 0.0;
+            double a[MAX_SSA_REACTIONS];
+            double a0 = 0;
+            for (int j = 0; j < reactions; j++) {
+                a[j] = s_rates[j];
+                for (int m = 0; m < reactants; m++) {
+                    if (const int alpha_jm = s_alpha[j * reactants + m]; alpha_jm > 0) {
+                        if (x[m] < alpha_jm) {
+                            a[j] = 0.0;
+                            break;
+                        }
+                        for (int k = x[m] - alpha_jm + 1; k <= x[m]; k++) {
+                            a[j] *= k;
+                        }
+                    }
+                }
+                a0 += a[j];
+            }
+
+            if (a0 != 0) {
+                //  Generate r_1, r_2 ∼ U([0, 1]).
+
+                double2 r = curand_uniform2_double(&state);
+
+                //  Use the Golden rule to transform r_1 into τ ∼ Exp(a_0(x))
+
+                double tau = log(1 / r.x) / a0;
+
+                //  Let j be the smallest integer for which
+
+                int j = 0;
+                for (double sum_a = a[0]; sum_a < r.y * a0 && j < reactions - 1;) {
+                    j++;
+                    sum_a += a[j];
+                }
+
+                //  Increment t by τ and x by v_j
+
+                for (int i = 0; i < reactants; i++) {
+                    x[i] += s_trans[reactants * j + i];
+                }
+                t += tau;
+            }
+            else {
+                t = tMax;
+            }
+
+            //  record first n paths
+
+            if (path < savedPaths) {
+                while (tSaved * tGrid < t && tSaved < pointsPerPath - 1) {
+                    tSaved++;
+                    for (int i = 0; i < reactants; i++) {
+                        d_paths[(sim * savedPaths * pointsPerPath * reactants) + (path * pointsPerPath * reactants) + (tSaved * reactants) + i] = x[i];
+                    }
+                    d_times[(sim * savedPaths * pointsPerPath) + (path * pointsPerPath) + tSaved] = tSaved * tGrid;
+                }
+            }
+
+            //  check boundary conditions
+
+            for (int s = 0; s < boundSets; s++) {
+                const int start = (s == 0) ? 0 : c_boundIdxs[s - 1];
+                const int end = c_boundIdxs[s];
+                bool match = true;
+                for (int k = start; k < end; k += 3) {
+                    const int reactantIdx = c_boundVals[k];
+                    const int op = c_boundVals[k + 1];
+                    const int value = c_boundVals[k + 2];
+                    bool ok;
+                    if (op == 0) ok = (x[reactantIdx] == value);
+                    else if (op == 1) ok = (x[reactantIdx] > value);
+                    else ok = (x[reactantIdx] < value);
+                    if (!ok) {
+                        match = false;
                         break;
                     }
-                    for (int k = x[m] - alpha_jm + 1; k <= x[m]; k++) {
-                        a[j] *= k;
-                    }
+                }
+                if (match) {
+                    exitCode = s;
+                    break;
                 }
             }
-            a0 += a[j];
-        }
+            if (exitCode >= 0) break;
 
-        if (a0 != 0) {
-            //  Generate r_1, r_2 ∼ U([0, 1]).
-
-            double2 r = curand_uniform2_double(&state);
-
-            //  Use the Golden rule to transform r_1 into τ ∼ Exp(a_0(x))
-
-            double tau = log(1 / r.x) / a0;
-
-            //  Let j be the smallest integer for which
-
-            int j = 0;
-            for (double sum_a = a[0]; sum_a < r.y * a0 && j < reactions - 1;) {
-                j++;
-                sum_a += a[j];
-            }
-
-            //  Increment t by τ and x by v_j
-
-            for (int i = 0; i < reactants; i++) {
-                x[i] += s_trans[reactants * j + i];
-            }
-            t += tau;
-        }
-        else {
-            t = tMax;
-        }
-
-        //  record first n paths
-
-        if (path < savedPaths) {
-            while (tSaved * tGrid < t && tSaved < pointsPerPath - 1) {
-                tSaved++;
-                for (int i = 0; i < reactants; i++) {
-                    d_paths[(sim * savedPaths * pointsPerPath * reactants) + (path * pointsPerPath * reactants) + (tSaved * reactants) + i] = x[i]; 
-                }
-                d_times[(sim * savedPaths * pointsPerPath) + (path * pointsPerPath) + tSaved] = tSaved * tGrid; 
-            }
-        }
     } while (t < tMax);
+
+    //  record exit time and code
+
+    d_exitTimes[idx] = t;
+    d_exits[idx] = exitCode;
+
+    //  backfill remainder of saved path with final state
+
+    if (path < savedPaths) {
+        while (tSaved < pointsPerPath - 1) {
+            tSaved++;
+            for (int i = 0; i < reactants; i++) {
+                d_paths[(sim * savedPaths * pointsPerPath * reactants) + (path * pointsPerPath * reactants) + (tSaved * reactants) + i] = x[i];
+            }
+            d_times[(sim * savedPaths * pointsPerPath) + (path * pointsPerPath) + tSaved] = tSaved * tGrid;
+        }
+    }
 }
 
 void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
@@ -148,11 +203,17 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
     double *d_timePoints = nullptr;
     int *d_samplePaths = nullptr;
 
+    double *d_exitTimes;
+    int *d_exits;
+
     const int n_reactionRates = static_cast<int>(simInfo.base.reactions.size());
     const int n_initialConditions = static_cast<int>(simInfo.base.initialConditions.size());
     const int n_reactantCoefficients = static_cast<int>(simInfo.base.reactantCoefficients.size());
     const int n_transitionCoefficients = static_cast<int>(simInfo.base.transitionCoefficients.size());
-    
+
+    const int n_exits = static_cast<int>(sysInfos.size()) * simInfo.warps * SSA_BLOCK_SIZE;
+    const int boundSets = static_cast<int>(simInfo.boundIdxs.size());
+
     int n_timePoints = 0;
     int n_samplePaths = 0;
     int pointsPerPath = 0;
@@ -161,9 +222,9 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
         n_timePoints = simInfo.savedPaths * pointsPerPath;
         n_samplePaths = n_timePoints * n_initialConditions;
     }
-    
+
     //  malloc buffers
-    
+
     cudaMalloc(&d_reactionRates, numBlocks * n_reactionRates * sizeof(double));
     cudaMalloc(&d_reactantCoefficients, numBlocks * n_reactantCoefficients * sizeof(int));
     cudaMalloc(&d_transitionCoefficients, numBlocks * n_transitionCoefficients * sizeof(int));
@@ -173,6 +234,9 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
         cudaMallocManaged(&d_samplePaths, n_samplePaths * sysInfos.size() * sizeof(int));
     }
     cudaMalloc(&d_initialConditions, numBlocks * n_initialConditions * sizeof(int));
+
+    cudaMallocManaged(&d_exitTimes, n_exits * sizeof(double));
+    cudaMallocManaged(&d_exits, n_exits * sizeof(int));
 
     //  memcpy to gpu
 
@@ -185,7 +249,14 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
             cudaMemcpy(d_initialConditions + n_initialConditions * block, sysInfos[sim].initialConditions.data(), n_initialConditions * sizeof(int), cudaMemcpyHostToDevice);
         }
     }
-    
+
+    //  copy boundary info to constant memory
+
+    cudaMemcpyToSymbol(c_boundIdxs, simInfo.boundIdxs.data(),
+                        simInfo.boundIdxs.size() * sizeof(int));
+    cudaMemcpyToSymbol(c_boundVals, simInfo.boundVals.data(),
+                        simInfo.boundVals.size() * sizeof(int));
+
     //  prefetches
 
     int device;
@@ -200,12 +271,19 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
         cudaMemPrefetchAsync(d_samplePaths, n_samplePaths * sysInfos.size() * sizeof(int), memlocDev, 0);
     }
 
+    cudaMemPrefetchAsync(d_exitTimes, n_exits * sizeof(double), memlocDev, 0);
+    cudaMemPrefetchAsync(d_exits, n_exits * sizeof(int), memlocDev, 0);
+
     //  kernel launch
 
-    cuSSA<<<numBlocks, SSA_BLOCK_SIZE>>>(n_initialConditions, n_reactionRates, simInfo.warps, simInfo.savedPaths, 
-                                        simInfo.tGrid, simInfo.tMax, simInfo.seed, d_initialConditions, d_reactionRates,
-                                        d_reactantCoefficients, d_transitionCoefficients, d_timePoints, d_samplePaths);
-                                
+    cuSSA<<<numBlocks, SSA_BLOCK_SIZE>>>(n_initialConditions, n_reactionRates,
+                                         simInfo.warps, simInfo.savedPaths, boundSets,
+                                         simInfo.tGrid, simInfo.tMax, simInfo.seed,
+                                         d_initialConditions, d_reactionRates,
+                                         d_reactantCoefficients, d_transitionCoefficients,
+                                         d_timePoints, d_samplePaths,
+                                         d_exitTimes, d_exits);
+
     cudaDeviceSynchronize();
 
     //  free unneeded allocations
@@ -215,64 +293,88 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
     cudaFree(d_transitionCoefficients);
     cudaFree(d_initialConditions);
 
+    //  prefetch results back to host
+
+    cudaMemLocation memlocHost{};
+    memlocHost.id = 0;
+    memlocHost.type = cudaMemLocationTypeHost;
+
+    cudaMemPrefetchAsync(d_exitTimes, n_exits * sizeof(double), memlocHost, 0);
+    cudaMemPrefetchAsync(d_exits, n_exits * sizeof(int), memlocHost, 0);
+
     if (simInfo.savedPaths) {
-        cudaMemLocation memlocHost{};
-        memlocHost.id = 0;
-        memlocHost.type = cudaMemLocationTypeHost;
-
-        cudaMemPrefetchAsync(d_timePoints, n_timePoints * sizeof(double), memlocHost, 0);
-        cudaMemPrefetchAsync(d_samplePaths, n_samplePaths * sizeof(int), memlocHost, 0);
-
-        //  get data
-
-        std::filesystem::create_directories(simInfo.outputDir);
-
-        if (simInfo.savedPaths) {
-            cudaMemLocation memlocHost2{};
-            memlocHost2.id = 0;
-            memlocHost2.type = cudaMemLocationTypeHost;
-
-            cudaMemPrefetchAsync(d_timePoints, n_timePoints * sysInfos.size() * sizeof(double), memlocHost2, 0);
-            cudaMemPrefetchAsync(d_samplePaths, n_samplePaths * sysInfos.size() * sizeof(int), memlocHost2, 0);
-            cudaDeviceSynchronize();
-
-            for (size_t sim = 0; sim < sysInfos.size(); sim++) {
-                std::filesystem::path outFile = simInfo.outputDir;
-                outFile.append("ssa_trajectories_" + std::to_string(sim) + ".csv");
-
-                std::ofstream file(outFile);
-                if (!file.is_open()) {
-                    std::cerr << "Failed to open csv file for writing: " << outFile << "\n";
-                    continue;
-                }
-
-                file << "path,time";
-                for (int r = 0; r < n_initialConditions; r++) {
-                    file << ",reactant_" << r;
-                }
-                file << "\n";
-
-                for (int path = 0; path < simInfo.savedPaths; path++) {
-                    for (int step = 0; step < pointsPerPath; step++) {
-                        size_t timeIdx = ((size_t)sim * simInfo.savedPaths * pointsPerPath)
-                                        + (path * pointsPerPath) + step;
-                        size_t pathBase = ((size_t)sim * simInfo.savedPaths * pointsPerPath * n_initialConditions)
-                                        + (path * pointsPerPath * n_initialConditions)
-                                        + (step * n_initialConditions);
-
-                        file << path << "," << d_timePoints[timeIdx];
-                        for (int r = 0; r < n_initialConditions; r++) {
-                            file << "," << d_samplePaths[pathBase + r];
-                        }
-                        file << "\n";
-                    }
-                }
-
-                file.close();
-            }
-            
-            cudaFree(d_timePoints);
-            cudaFree(d_samplePaths);
-        }
+        cudaMemPrefetchAsync(d_timePoints, n_timePoints * sysInfos.size() * sizeof(double), memlocHost, 0);
+        cudaMemPrefetchAsync(d_samplePaths, n_samplePaths * sysInfos.size() * sizeof(int), memlocHost, 0);
     }
+
+    cudaDeviceSynchronize();
+
+    //  get data
+
+    std::filesystem::create_directories(simInfo.outputDir);
+
+    const int pathsPerSim = simInfo.warps * SSA_BLOCK_SIZE;
+
+    for (size_t sim = 0; sim < sysInfos.size(); sim++) {
+        std::filesystem::path exitFile = simInfo.outputDir;
+        exitFile.append("ssa_exits_" + std::to_string(sim) + ".csv");
+
+        std::ofstream efile(exitFile);
+        if (!efile.is_open()) {
+            std::cerr << "Failed to open csv file for writing: " << exitFile << "\n";
+            continue;
+        }
+
+        efile << "path,exit_time,exit_code\n";
+
+        for (int path = 0; path < pathsPerSim; path++) {
+            const size_t exitIdx = (sim * pathsPerSim) + path;
+            efile << path << "," << d_exitTimes[exitIdx] << "," << d_exits[exitIdx] << "\n";
+        }
+
+        efile.close();
+    }
+
+    if (simInfo.savedPaths) {
+        for (size_t sim = 0; sim < sysInfos.size(); sim++) {
+            std::filesystem::path outFile = simInfo.outputDir;
+            outFile.append("ssa_trajectories_" + std::to_string(sim) + ".csv");
+
+            std::ofstream file(outFile);
+            if (!file.is_open()) {
+                std::cerr << "Failed to open csv file for writing: " << outFile << "\n";
+                continue;
+            }
+
+            file << "path,time";
+            for (int r = 0; r < n_initialConditions; r++) {
+                file << ",reactant_" << r;
+            }
+            file << "\n";
+
+            for (int path = 0; path < simInfo.savedPaths; path++) {
+                for (int step = 0; step < pointsPerPath; step++) {
+                    size_t timeIdx = ((size_t)sim * simInfo.savedPaths * pointsPerPath)
+                                    + (path * pointsPerPath) + step;
+                    size_t pathBase = ((size_t)sim * simInfo.savedPaths * pointsPerPath * n_initialConditions)
+                                    + (path * pointsPerPath * n_initialConditions)
+                                    + (step * n_initialConditions);
+
+                    file << path << "," << d_timePoints[timeIdx];
+                    for (int r = 0; r < n_initialConditions; r++) {
+                        file << "," << d_samplePaths[pathBase + r];
+                    }
+                    file << "\n";
+                }
+            }
+
+            file.close();
+        }
+
+        cudaFree(d_timePoints);
+        cudaFree(d_samplePaths);
+    }
+
+    cudaFree(d_exitTimes);
+    cudaFree(d_exits);
 }
