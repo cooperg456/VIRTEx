@@ -11,6 +11,14 @@ Before you install this software, ensure that your system has the required hardw
 - The NVIDIA [CUDA Toolkit](https://developer.nvidia.com/cuda/toolkit) (version 13.0 or higher)
 - An NVIDIA [driver](https://www.nvidia.com/en-us/drivers/) that is compatible with your GPU and CUDA Toolkit version
 
+### A note on operating systems
+
+This software is not, and has no plans to be, optimized for the Windows family of operating systems.
+
+If you choose to compile this software for Windows, know that WDDM adds meaningful overhead to every CUDA driver call. In its current state, this codebase makes many such calls per sweep, which could mean the difference between seconds and minutes in execution time. 
+
+This, along with my general distaste for the included bloatware, spyware, and forced AI integration of Windows, is why the repo will be built and tested solely on Linux machines for the foreseeable future.
+
 ## Installation
 
 This software uses [CMake](https://cmake.org/download/) version 3.24 or higher as a build system generator.
