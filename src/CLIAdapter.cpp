@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 CLIAdapter::Arguments CLIAdapter::parseArguments(int argc, char *argv[]) {
-    CLI::App app{"CuCTMC -- Parallel tools for analyzing Chemical Master Equation CTMCs"};
+    CLI::App app{"VIRTEx — Viral Infection, Recovery, and Transmission Explorer"};
 
     std::random_device rd;
 

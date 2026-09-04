@@ -1,52 +1,84 @@
-# CuCTMC
-A set of parallel tools to analyze Continuous-Time Markov Chains (CTMCs) derrived from the Chemical Master Equation (CME).
+# VIRTEx — Viral Infection, Recovery, and Transmission Explorer
+A set of parallel tools for analyzing Continuous-Time Markov Chains (CTMCs) derived from the Chemical Master Equation 
+(CME).
 
-This repository was created to support the Martinson Applied Project (MAP) "Stochastic Modeling of Host Immune Response to Viral Infections" at the University of Pittsburgh, led by Dr. David Swigon and Dr. Gilles Clermont. 
-I created this repository independently, in my free time. It is not an official Pitt or MAP repository, and it has not been reviewed or endorsed by the project leaders.
+This repository was created to support the Martinson Applied Project (MAP), *"Stochastic Modeling of Host Immune 
+Response to Viral Infections,"* at the University of Pittsburgh, led by Dr. David Swigon and Dr. Gilles Clermont.
+
+I built this independently, in my own time. It is not an official Pitt or MAP repository and has not been reviewed in 
+its entirety or endorsed by the project's leaders.
+
+
 
 ## Requirements
 
-Before you install this software, ensure that your system has the required hardware and software. The requirements include:
+Before you install this software, ensure that your system has the required hardware and software for one of the 
+following groups.
+
+
+
+### CUDA
+
 - An NVIDIA GPU with [compute capability](https://developer.nvidia.com/cuda/gpus) 7.5 or higher
-- The NVIDIA [CUDA Toolkit](https://developer.nvidia.com/cuda/toolkit) (version 13.0 or higher)
-- An NVIDIA [driver](https://www.nvidia.com/en-us/drivers/) that is compatible with your GPU and CUDA Toolkit version
+- The [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda/toolkit) (version 13.0 or higher)
+- An [NVIDIA driver](https://www.nvidia.com/en-us/drivers/) that is compatible with your GPU and CUDA Toolkit version
 
-### A note on operating systems
+While this software *technically* compiles on Windows machines, I heavily recommend against it. Windows machines using
+WDDM have significantly more overhead while using this software than linux machines. In practice, this has lead to 
+simulations taking up to five times longer than expected. Using WSL2 might help, but I have not tested this.
 
-This software is not, and has no plans to be, optimized for the Windows family of operating systems.
 
-If you choose to compile this software for Windows, know that WDDM adds significant overhead to every CUDA driver call. In its current state, this codebase makes many such calls per sweep, which could mean the difference between seconds and minutes in execution time. 
 
-This, along with my general distaste for the included bloatware, spyware, and forced AI integration of Windows operating systems, is why the repo will be built and tested solely on Linux machines for the foreseeable future.
+### METAL
+
+Coming soon...
+
+
+
+### CPU
+
+Coming soon...
+
+
 
 ## Installation
 
-This software uses [CMake](https://cmake.org/download/) version 3.24 or higher as a build system generator.
-
-Clone or download the repository. From the repository directory, run: 
+This software uses [CMake](https://cmake.org/download/) version 3.24 or higher to build. To build and install this software, run:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=<Debug|Release> -DINSTALL_MODELS=<ON|OFF>
+cmake -B build -DCMAKE_BUILD_TYPE=<Debug|Release> -DINSTALL_MODELS=<ON|OFF>
 cmake --build build --parallel $(nproc)
 cmake --install build --prefix </path/to/install>
 ```
 
-If you set `INSTALL_MODELS` to `ON`, the installation includes the example models in the installed directory.
+Set `INSTALL_MODELS` to `ON` to install the included viral models.
+
+Precompiled binaries will be available in future versions.
+
+
 
 ### Uninstall
 
-From the repository directory, run: 
+From the build directory, run:
 
 ```bash
-xargs rm < build/install_manifest.txt
+xargs rm < install_manifest.txt
 ```
 
-## Usage
 
-This software is designed to be used from the command line. From the install directory, run: 
+
+## Usage (Incomplete)
+
+For complete list of options, run:
 
 ```bash
-./CuCTMC [OPTIONS] <reaction file.json>
+./virtex --help
+```
+
+This software is designed to be used from the command line. From the install directory, run:
+
+```bash
+./virtex [OPTIONS] <reaction file.json>
 ```
 
 ### Reaction Files
@@ -74,33 +106,33 @@ Lastly, specify the reactions. Each reaction must include a name, a nonnegative 
 ```json
 "reactions" : [
   {
-    "name" : "gamma_VH", 
-    "rate" : 0.0007, 
-    "reactants" : { "V" : 1, "H" : 1 }, 
+    "name" : "gamma_VH",
+    "rate" : 0.0007,
+    "reactants" : { "V" : 1, "H" : 1 },
     "products" : { "I" : 1 }
   },
   {
-    "name" : "gamma_V", 
-    "rate" : 37.5, 
-    "reactants" : { "I" : 1 }, 
+    "name" : "gamma_V",
+    "rate" : 37.5,
+    "reactants" : { "I" : 1 },
     "products" : {"V" : 1, "I" : 1 }
   },
   {
-    "name" : "a_I", 
-    "rate" : 1.5, 
-    "reactants" : { "I" : 1 }, 
+    "name" : "a_I",
+    "rate" : 1.5,
+    "reactants" : { "I" : 1 },
     "products" : { "D" : 1 }
   },
   {
-    "name" : "a_V", 
-    "rate" : 1.7, 
-    "reactants" : { "V" : 1 }, 
+    "name" : "a_V",
+    "rate" : 1.7,
+    "reactants" : { "V" : 1 },
     "products" : {}
   },
   {
-    "name" : "b_HD", 
-    "rate" : 0.004, 
-    "reactants" : { "H" : 1, "D" : 1 }, 
+    "name" : "b_HD",
+    "rate" : 0.004,
+    "reactants" : { "H" : 1, "D" : 1 },
     "products" : { "H" : 2 }
   }
 ]
@@ -139,7 +171,7 @@ Use this flag to set the rate of one reaction. `name` is the name of the reactio
 --reactants Gamma $(printf '%i 0 1' $(seq 1 10))
 ```
 
-Use this flag to set the reactants of one reaction. `name` is the name of the reaction. `values` is one set of reactant counts, with one count per species. Use one set to keep the reactants fixed. Use many sets to sweep the reactants over many simulations. 
+Use this flag to set the reactants of one reaction. `name` is the name of the reaction. `values` is one set of reactant counts, with one count per species. Use one set to keep the reactants fixed. Use many sets to sweep the reactants over many simulations.
 
 ```bash
 --products <name> <values...>
@@ -147,7 +179,7 @@ Use this flag to set the reactants of one reaction. `name` is the name of the re
 --products aI $(printf '0 %i 0 1' $(seq 1 50))
 ```
 
-Use this flag to set the products of one reaction. `name` is the name of the reaction. `values` is one set of product counts, with one count per species. Use one set to keep the products fixed. Use many sets to sweep the products over many simulations. 
+Use this flag to set the products of one reaction. `name` is the name of the reaction. `values` is one set of product counts, with one count per species. Use one set to keep the products fixed. Use many sets to sweep the products over many simulations.
 
 ```bash
 --ic <values...>

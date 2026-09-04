@@ -1,8 +1,9 @@
 /******************************************************************************
-*  CuCTMC -- https://github.com/cooperg456/CuCTMC
+ *  VIRTEx — Viral Infection, Recovery, and Transmission Explorer
+ *  https://github.com/cooperg456/VIRTEx
  *
- *  A set of parallel tools to analyze Continuous-Time Markov Chains (CTMCs)
- *  of the Chemical Master Equation (CME) type
+ *  A set of parallel tools for analyzing Continuous-Time Markov Chains (CTMCs)
+ *  derived from the Chemical Master Equation (CME).
  ******************************************************************************
  *  Copyright (c) 2026 Cooper Gray
  *
