@@ -7,7 +7,7 @@
  *  http://www.apache.org/licenses/LICENSE-2.0
  ******************************************************************************/
 
-#include "StochasticSimulation.cuh"
+#include "StochasticSimulation.hpp"
 
 #include "cuda_runtime.h"
 #include "curand_kernel.h"
@@ -377,4 +377,27 @@ void SSA(const SSASimInfo& simInfo, const std::vector<SSASysInfo> &sysInfos) {
 
     cudaFree(d_exitTimes);
     cudaFree(d_exits);
+}
+
+/*
+for (auto& boundSet : args.bounds.bounds) {
+    for (auto& bound : boundSet) {
+        simInfo.boundVals.push_back(static_cast<int>(ctmc.getReactantIdx(std::get<0>(bound))));
+
+        if (std::string& op = std::get<1>(bound); op == "=") {
+            simInfo.boundVals.push_back(0);
+        }
+        else if (op == ">") {
+            simInfo.boundVals.push_back(1);
+        }
+        else if (op == "<") {
+            simInfo.boundVals.push_back(2);
+        }
+        else {
+            throw std::runtime_error("Invalid comparison operator: " + op);
+        }
+
+        simInfo.boundVals.push_back(std::get<2>(bound));
+    }
+    simInfo.boundIdxs.push_back(static_cast<int>(simInfo.boundVals.size()));
 }
