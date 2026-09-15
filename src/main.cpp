@@ -28,8 +28,8 @@ int main(int argc, char *argv[]) {
     CLITool::Arguments args = CLITool::parseArguments(argc, argv);
 
     auto model = FileIO::loadModel_JSON(args.inputFile);
-    auto sim = SimRunner( SimBuilder::BuildSweep(model, args.mods), args.bounds, args.analysis, args.warps);
-    volatile double* progress = sim.ssa(args.seed);
+    auto sim = SimRunner(SimBuilder::BuildSweep(model, args.mods), args.bounds, args.analysis, args.warps);
+    sim.ssa(args.seed);
 
     if (args.watch) {
         const std::string title = "Progress";

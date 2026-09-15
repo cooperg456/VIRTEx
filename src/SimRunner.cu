@@ -19,3 +19,24 @@
 /******************************************************************************
  *  SimRunner class
  ******************************************************************************/
+
+SimRunner::SimRunner(const std::vector<SimBuilder::Model>& models, const SimBuilder::Bounds& bounds,
+                     const SimBuilder::Analysis& analysis, int warps) {
+
+}
+
+SimRunner::~SimRunner() {
+
+}
+
+void SimRunner::ssa(unsigned long long seed) {
+
+}
+
+volatile double* SimRunner::progress() const {
+
+}
+
+void SimRunner::sync() const {
+    cudaDeviceSynchronize();
+}

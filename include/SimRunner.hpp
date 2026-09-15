@@ -23,12 +23,12 @@ public:
               const SimBuilder::Analysis& analysis, int warps);
     ~SimRunner();
 
-    volatile double* ssa(unsigned long long seed);
-    volatile double* sde(unsigned long long seed);
-    volatile double* tau(unsigned long long seed);
+    void ssa(unsigned long long seed);
+
+    volatile double* progress() const;
 
     void sync() const;
 
 private:
-
+    volatile double* progress;
 };
