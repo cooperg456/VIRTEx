@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<model desc="Bursting viral model">
+    <species id="H" symbol="H" desc="healthy target cells"/>
+    <species id="V" symbol="V" desc="free virions"/>
+    <species id="I" symbol="I" desc="infected cells"/>
+    <species id="D" symbol="D" desc="dead cells"/>
+
+    <!-- V + H -> I -->
+    <reaction id="gamma_VH" symbol="\gamma_{VH}" desc="rate of virion binding" rate="7e-4" >
+        <reactant species="V" n="1"/>
+        <reactant species="H" n="1"/>
+        <product  species="I" n="1"/>
+    </reaction>
+
+    <!-- I -> V + D -->
+    <reaction id="a_I" symbol="a_I" desc="rate of infected cell clearance" rate="1.5">
+        <reactant species="I" n="1"/>
+        <product  species="V" n="25"/>
+        <product  species="D" n="1"/>
+    </reaction>
+
+    <!-- V -> 0 -->
+    <reaction id="a_V" symbol="a_V" desc="rate of free virion decay" rate="1.7">
+        <reactant species="V" n="1"/>
+    </reaction>
+
+    <!-- H + D -> 2 H -->
+    <reaction id="b_HD" symbol="b_{HD}" desc="rate of cell reproduction" rate="4e-3">
+        <reactant species="H" n="1"/>
+        <reactant species="D" n="1"/>
+        <product  species="H" n="2"/>
+    </reaction>
+</model>

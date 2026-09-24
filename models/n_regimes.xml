@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sweep desc="n regimes" batchsize="32" T="50" seed="1275">
+
+    <analysis>
+        <savepaths t="0.01"/>
+    </analysis>
+
+    <axis>
+        <initial species="H" values="1000"/>
+        <initial species="V" values="3"/>
+        <initial species="I" values="0"/>
+        <initial species="D" values="0"/>
+    </axis>
+
+    <axis>
+        <product reaction="a_I" values="3 10 25 50"/>
+    </axis>
+
+</sweep>

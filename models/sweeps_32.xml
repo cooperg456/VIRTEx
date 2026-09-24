@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sweep desc="gamma_VH vs n" batchsize="256" T="50">
+
+    <analysis>
+        <stopping>
+            <bound id="recovery" conditions="H:=:1000 V:=:0"/>
+            <bound id="death" conditions="H:<:1"/>
+        </stopping>
+    </analysis>
+
+    <axis>
+        <initial species="H" values="1000"/>
+        <initial species="V" values="3"/>
+        <initial species="I" values="0"/>
+        <initial species="D" values="0"/>
+    </axis>
+
+    <axis>
+        <rate reaction="gamma_VH" values="7e-5:7e-3:128" scale="log"/>
+    </axis>
+
+    <axis>
+        <product reaction="a_I" species="n" values="3 10 25 50"/>
+    </axis>
+
+</sweep>

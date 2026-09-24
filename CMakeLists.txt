@@ -8,7 +8,7 @@ project(VIRTEx
 
 ##  Nice try Microslop
 if (WIN32)
-    message(FATAL_ERROR "VIRTEx does not support Windows. Build using Linux, or WSL2 with GPU passthrough.")
+    ##  TODO:   message(FATAL_ERROR "VIRTEx does not support Windows. Build using Linux or WSL2.")
 endif ()
 
 include(GNUInstallDirs)
@@ -20,9 +20,9 @@ include(GNUInstallDirs)
 ##  VIRTEX_SHARED_LIBS option (undefined by default) can be used to force shared/static build
 ##  VIRTEX_CUDA_ARCH option can be set to native for faster compile times
 option(VIRTEX_BUILD_EXECUTABLE "Build VIRTEx executable" ${PROJECT_IS_TOP_LEVEL})
-option(VIRTEX_BUILD_TESTS "Build VIRTEx tests" OFF)
-option(VIRTEX_BUILD_EXAMPLES "Build VIRTEx examples" OFF)
-option(VIRTEX_BUILD_DOCS "Build VIRTEx documentation" OFF)
+##  option(VIRTEX_BUILD_TESTS "Build VIRTEx tests" OFF)
+##  option(VIRTEX_BUILD_EXAMPLES "Build VIRTEx examples" OFF)
+##  option(VIRTEX_BUILD_DOCS "Build VIRTEx documentation" OFF)
 option(VIRTEX_INSTALL "Generate target for installing VIRTEx" ${PROJECT_IS_TOP_LEVEL})
 set(VIRTEX_CUDA_ARCH all-major CACHE STRING "CUDA architectures")
 
@@ -50,15 +50,15 @@ add_library(VIRTEx::virtex ALIAS virtex)
 
 target_sources(virtex
     PRIVATE
-        src/StochasticSimulation.cu
-        src/FileIO.cpp
+    src/Model.cpp
+    src/SimObject.cu
     PUBLIC
-        FILE_SET HEADERS
-            BASE_DIRS
-                "${CMAKE_CURRENT_SOURCE_DIR}/include"
-            FILES
-                include/virtex/StochasticSimulation.hpp
-                include/virtex/FileIO.hpp
+    FILE_SET HEADERS
+    BASE_DIRS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    FILES
+    include/virtex/Model.hpp
+    include/virtex/SimObject.hpp
 )
 
 target_compile_features(virtex
@@ -91,10 +91,14 @@ if (VIRTEX_BUILD_EXECUTABLE)
     add_executable(virtex-cli)
     add_executable(VIRTEx::virtex-cli ALIAS virtex-cli)
 
+    enable_language(C)
+
     target_sources(virtex-cli PRIVATE
-        src/main.cpp
-        src/CLITool.cpp
+        src/virtex.cpp
+        vendor/xml/xml.c
     )
+
+    target_include_directories(virtex-cli PRIVATE vendor)
 
     target_link_libraries(virtex-cli PRIVATE VIRTEx::virtex)
 
@@ -105,40 +109,40 @@ if (VIRTEX_BUILD_EXECUTABLE)
 
     set_property(TARGET virtex-cli PROPERTY
         INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
-endif()
+endif ()
 
 ################################################################################
 ##  install rules
 ################################################################################
 
-if(VIRTEX_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
+if (VIRTEX_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
     install(TARGETS virtex
         LIBRARY
         ARCHIVE
         FILE_SET HEADERS
     )
 
-    if(VIRTEX_BUILD_EXECUTABLE)
+    if (VIRTEX_BUILD_EXECUTABLE)
         install(TARGETS virtex-cli
             RUNTIME
         )
-    endif()
-endif()
+    endif ()
+endif ()
 
 ################################################################################
 ##  other targets
 ################################################################################
 
-if(VIRTEX_BUILD_TESTS)
+if (VIRTEX_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
-endif()
+endif ()
 
-if(VIRTEX_BUILD_EXAMPLES)
+if (VIRTEX_BUILD_EXAMPLES)
     add_subdirectory(examples)
-endif()
+endif ()
 
-if(VIRTEX_BUILD_DOCS)
+if (VIRTEX_BUILD_DOCS)
     find_package(Doxygen REQUIRED)
     doxygen_add_docs(docs include)
-endif()
+endif ()
