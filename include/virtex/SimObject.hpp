@@ -16,6 +16,36 @@ namespace Vx {
     };
 
     class SimOutput {
+    public:
+        SimOutput(Model::Params const &params, int numTrials);
+
+        ~SimOutput();
+
+        SimOutput(const SimOutput &) = delete;
+
+        SimOutput(SimOutput &&) noexcept;
+
+        SimOutput &operator=(const SimOutput &) = delete;
+
+        SimOutput &operator=(SimOutput &&) noexcept;
+
+        std::vector<int> getPaths() const;
+
+        std::vector<int> getExits() const;
+
+        std::vector<double> getTimes() const;
+
+    private:
+        friend class SimObject;
+
+        int _numTrials = 0;
+
+        const Model::Params* _params;
+
+        int* d_paths = nullptr;
+
+        int* d_exits = nullptr;
+        double* d_times = nullptr;
     };
 
     class SimObject {
@@ -34,22 +64,19 @@ namespace Vx {
 
         void runSimulation();
 
-        SimOutput deviceSynchronize();
+        SimOutput* deviceSynchronize();
 
     private:
         const Model::Params &_params;
         const SimType _type;
 
-        int _numBlocks = 0;
+        int _numTrials = 1;
 
         double* d_rates = nullptr;
         int* d_initial = nullptr;
         int* d_alpha = nullptr;
         int* d_trans = nullptr;
 
-        int* d_paths = nullptr;
-
-        int* d_exits = nullptr;
-        int* d_times = nullptr;
+        SimOutput* simOutput = nullptr;
     };
 }

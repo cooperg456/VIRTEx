@@ -20,6 +20,7 @@ include(GNUInstallDirs)
 ##  VIRTEX_SHARED_LIBS option (undefined by default) can be used to force shared/static build
 ##  VIRTEX_CUDA_ARCH option can be set to native for faster compile times
 option(VIRTEX_BUILD_EXECUTABLE "Build VIRTEx executable" ${PROJECT_IS_TOP_LEVEL})
+option(VIRTEX_BUILD_PYTHON "Build VIRTEx Python bindings" OFF)
 ##  option(VIRTEX_BUILD_TESTS "Build VIRTEx tests" OFF)
 ##  option(VIRTEX_BUILD_EXAMPLES "Build VIRTEx examples" OFF)
 ##  option(VIRTEX_BUILD_DOCS "Build VIRTEx documentation" OFF)
@@ -132,6 +133,17 @@ endif ()
 ################################################################################
 ##  other targets
 ################################################################################
+
+if (VIRTEX_BUILD_PYTHON)
+    set(DEV_MODULE Development.Module)
+
+    find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
+
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+        OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+    find_package(nanobind CONFIG REQUIRED)
+endif ()
 
 if (VIRTEX_BUILD_TESTS)
     enable_testing()

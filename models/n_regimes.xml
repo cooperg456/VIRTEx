@@ -3,7 +3,7 @@
 <sweep desc="n regimes" batchsize="32" T="50" seed="1275">
 
     <analysis>
-        <savepaths t="0.01"/>
+        <savepaths t="0.1"/>
     </analysis>
 
     <axis>
@@ -14,7 +14,7 @@
     </axis>
 
     <axis>
-        <product reaction="a_I" values="3 10 25 50"/>
+        <product reaction="a_I" species="V" values="3 10 25 50"/>
     </axis>
 
 </sweep>

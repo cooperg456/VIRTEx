@@ -350,7 +350,12 @@ int main(int argc, char *argv[]) {
     Vx::SimObject sim = Vx::SimObject(params, Vx::SimType::StochasticSimulation);
 
     sim.runSimulation();
-    Vx::SimOutput out = sim.deviceSynchronize();
+    Vx::SimOutput* out = sim.deviceSynchronize();
+
+    auto paths = out->getPaths();
+    for (const auto &path: paths) {
+        std::cout << path << "\n";
+    }
 
     return 0;
 }
