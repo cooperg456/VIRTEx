@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
 project(VIRTEx
     VERSION 0.0.1
@@ -15,12 +15,11 @@ include(GNUInstallDirs)
 
 ################################################################################
 ##  general settings and options
-################################################################################
 
 ##  VIRTEX_SHARED_LIBS option (undefined by default) can be used to force shared/static build
 ##  VIRTEX_CUDA_ARCH option can be set to native for faster compile times
 option(VIRTEX_BUILD_EXECUTABLE "Build VIRTEx executable" ${PROJECT_IS_TOP_LEVEL})
-option(VIRTEX_BUILD_PYTHON "Build VIRTEx Python bindings" OFF)
+option(VIRTEX_BUILD_PYTHON "Build VIRTEx Python bindings" ON)
 ##  option(VIRTEX_BUILD_TESTS "Build VIRTEx tests" OFF)
 ##  option(VIRTEX_BUILD_EXAMPLES "Build VIRTEx examples" OFF)
 ##  option(VIRTEX_BUILD_DOCS "Build VIRTEx documentation" OFF)
@@ -38,13 +37,11 @@ endif ()
 
 ################################################################################
 ##  VIRTEx dependencies
-################################################################################
 
 find_package(CUDAToolkit REQUIRED)
 
 ################################################################################
 ##  VIRTEx library
-################################################################################
 
 add_library(virtex)
 add_library(VIRTEx::virtex ALIAS virtex)
@@ -86,7 +83,6 @@ target_compile_options(virtex PRIVATE
 
 ################################################################################
 ##  virtex executable
-################################################################################
 
 if (VIRTEX_BUILD_EXECUTABLE)
     add_executable(virtex-cli)
@@ -96,10 +92,11 @@ if (VIRTEX_BUILD_EXECUTABLE)
 
     target_sources(virtex-cli PRIVATE
         src/virtex.cpp
+        src/Helpers.cpp
         vendor/xml/xml.c
     )
 
-    target_include_directories(virtex-cli PRIVATE vendor)
+    target_include_directories(virtex-cli PRIVATE src vendor)
 
     target_link_libraries(virtex-cli PRIVATE VIRTEx::virtex)
 
@@ -114,7 +111,6 @@ endif ()
 
 ################################################################################
 ##  install rules
-################################################################################
 
 if (VIRTEX_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
     install(TARGETS virtex
@@ -132,17 +128,30 @@ endif ()
 
 ################################################################################
 ##  other targets
-################################################################################
 
 if (VIRTEX_BUILD_PYTHON)
     set(DEV_MODULE Development.Module)
 
     find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
 
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
-    find_package(nanobind CONFIG REQUIRED)
+    add_subdirectory(vendor/nanobind)
+
+    nanobind_add_module(virtex-py)
+
+    target_sources(virtex-py PRIVATE
+        src/PyInterface.cpp
+        src/Helpers.cpp
+        vendor/xml/xml.c
+    )
+
+    target_include_directories(virtex-py PRIVATE src vendor vendor/nanobind/include)
+
+    target_link_libraries(virtex-py PRIVATE VIRTEx::virtex)
+
+    set_target_properties(virtex-py PROPERTIES
+        OUTPUT_NAME virtex
+        ARCHIVE_OUTPUT_NAME virtex-py
+    )
 endif ()
 
 if (VIRTEX_BUILD_TESTS)
