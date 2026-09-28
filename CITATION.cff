@@ -5,6 +5,6 @@ authors:
     given-names: Cooper
     orcid: https://orcid.org/0009-0009-3553-5893
 title: "Virtex -- Viral Infection, Recovery, and Transmission Explorer"
-version: 0.0.1
+version: 0.1.0
 date-released: 2026-07-27
 url: https://github.com/cooperg456/VIRTEx
