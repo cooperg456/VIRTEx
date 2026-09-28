@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
 project(VIRTEx
-    VERSION 0.0.1
+    VERSION 0.1.0
     DESCRIPTION "Viral Infection, Recovery, and Transmission Explorer"
     LANGUAGES CXX CUDA
 )
 
 ##  Nice try Microslop
 if (WIN32)
-    ##  TODO:   message(FATAL_ERROR "VIRTEx does not support Windows. Build using Linux or WSL2.")
+    message(FATAL_ERROR "VIRTEx does not support Windows. Build using Linux or WSL2.")
 endif ()
 
 include(GNUInstallDirs)

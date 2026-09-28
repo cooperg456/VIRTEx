@@ -7,6 +7,9 @@
 //  http://www.apache.org/licenses/LICENSE-2.0
 
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <virtex/Model.hpp>
 #include <virtex/SimObject.hpp>
