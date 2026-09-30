@@ -310,7 +310,7 @@ std::vector<double> SimOutput::getTimes() const {
         int n = _params->size * _numTrials;
 
         auto result = std::vector<double>(n, 0);
-        cudaMemcpy(result.data(), d_exits, n * sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(result.data(), d_times, n * sizeof(int), cudaMemcpyDeviceToHost);
         return result;
     }
     return std::vector<double>(0);

@@ -40,7 +40,7 @@ namespace Vx {
 
         int _numTrials = 0;
 
-        const Model::Params* _params;
+        const Model::Params* _params = nullptr;
 
         int* d_paths = nullptr;
 

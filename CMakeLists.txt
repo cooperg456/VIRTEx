@@ -110,38 +110,19 @@ if (VIRTEX_BUILD_EXECUTABLE)
 endif ()
 
 ################################################################################
-##  install rules
-
-if (VIRTEX_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
-    install(TARGETS virtex
-        LIBRARY
-        ARCHIVE
-        FILE_SET HEADERS
-    )
-
-    if (VIRTEX_BUILD_EXECUTABLE)
-        install(TARGETS virtex-cli
-            RUNTIME
-        )
-    endif ()
-endif ()
-
-################################################################################
 ##  other targets
 
 if (VIRTEX_BUILD_PYTHON)
-    set(DEV_MODULE Development.Module)
-
-    find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
+    find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
 
     add_subdirectory(vendor/nanobind)
 
-    nanobind_add_module(virtex-py)
+    nanobind_add_module(virtex-py NB_STATIC)
 
     target_sources(virtex-py PRIVATE
-        src/PyInterface.cpp
-        src/Helpers.cpp
-        vendor/xml/xml.c
+            src/PyInterface.cpp
+            src/Helpers.cpp
+            vendor/xml/xml.c
     )
 
     target_include_directories(virtex-py PRIVATE src vendor vendor/nanobind/include)
@@ -149,8 +130,8 @@ if (VIRTEX_BUILD_PYTHON)
     target_link_libraries(virtex-py PRIVATE VIRTEx::virtex)
 
     set_target_properties(virtex-py PROPERTIES
-        OUTPUT_NAME virtex
-        ARCHIVE_OUTPUT_NAME virtex-py
+            OUTPUT_NAME virtex
+            ARCHIVE_OUTPUT_NAME virtex-py
     )
 endif ()
 
@@ -166,4 +147,27 @@ endif ()
 if (VIRTEX_BUILD_DOCS)
     find_package(Doxygen REQUIRED)
     doxygen_add_docs(docs include)
+endif ()
+
+################################################################################
+##  install rules
+
+if (VIRTEX_INSTALL AND NOT CMAKE_SKIP_INSTALL_RULES)
+    install(TARGETS virtex
+        LIBRARY
+        ARCHIVE
+        FILE_SET HEADERS
+    )
+
+    if (VIRTEX_BUILD_EXECUTABLE)
+        install(TARGETS virtex-cli
+            RUNTIME
+        )
+    endif ()
+
+    if (VIRTEX_BUILD_PYTHON)
+        install(TARGETS virtex-py
+            LIBRARY DESTINATION python/virtex
+        )
+    endif ()
 endif ()

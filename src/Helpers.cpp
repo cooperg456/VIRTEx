@@ -10,6 +10,7 @@
 
 #include <xml/xml.h>
 
+#include <cstring>
 #include <fstream>
 #include <random>
 
